@@ -1,1 +1,17 @@
 .idea
+*~
+.ipynb_checkpoints
+__pycache__
+*.aux
+*.log
+*.fls
+*.fdb_latexmk
+*.out
+*.rip
+*.bbl
+*.bcf
+*.blg
+*.run.xml
+auto/
+*.npy
+ltximg

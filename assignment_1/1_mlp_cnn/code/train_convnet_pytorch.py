@@ -8,6 +8,7 @@ from __future__ import print_function
 
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 import os
 from convnet_pytorch import ConvNet
 import cifar10_utils
@@ -49,7 +50,9 @@ def accuracy(predictions, targets):
     ########################
     # PUT YOUR CODE HERE  #
     #######################
-    raise NotImplementedError
+    n = targets.size(0)
+    numeric_predictions = torch.argmax(predictions, dim=1)
+    accuracy = torch.sum(targets[torch.arange(n), numeric_predictions]) / n
     ########################
     # END OF YOUR CODE    #
     #######################
@@ -73,7 +76,78 @@ def train():
     ########################
     # PUT YOUR CODE HERE  #
     #######################
-    raise NotImplementedError
+    if torch.cuda.is_available():
+        torch.backends.cudnn.determinstic = True
+        torch.backends.cudnn.benchmark = False
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device("cpu")
+
+
+    net = ConvNet(3, 10).to(device)
+    cifar = cifar10_utils.get_cifar10(FLAGS.data_dir)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(net.parameters(), lr=FLAGS.learning_rate)
+    # decay LR by 0.5 every 500 iterations
+    #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.5)
+
+    losses = []
+    accuracies = []
+    for step in range(FLAGS.max_steps):
+        # load the next batch
+        x, y = cifar["train"].next_batch(FLAGS.batch_size)
+        x = torch.from_numpy(x).to(device)
+        # Normalize per channel
+        #x = x / torch.Tensor([62.245, 60.982, 65.468]).view(1, 3, 1, 1)
+        #x = x.reshape(FLAGS.batch_size, -1)
+        y = torch.from_numpy(y)
+        y = torch.argmax(y, dim=1).to(device)
+
+        # forward pass
+        net.train()
+        out = net(x)
+        loss = criterion(out, y)
+        losses.append(loss.item())
+
+        # backward pass + weight update
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        #scheduler.step()
+
+        # evaluate every FLAGS.eval_freq iterations
+        if (step + 1) % FLAGS.eval_freq == 0:
+            net.eval()
+            # during test time, batch norm uses the running stats from training,
+            # so the batch size doesn't matter and we can choose one which divides
+            # the total number of samples
+            num_batches = 100
+            bs = 100
+            mean_acc = 0
+            for i in range(num_batches):
+                x, y = cifar["train"].next_batch(bs)
+                x = torch.from_numpy(x).to(device)
+                y = torch.from_numpy(y).to(device)
+                #x = x / torch.Tensor([62.245, 60.982, 65.468]).view(1, 3, 1, 1)
+                with torch.no_grad():
+                    out = net(x)
+                    mean_acc += accuracy(out, y) / num_batches
+            accuracies.append(mean_acc)
+            print("Step {}, accuracy: {:.5f} %".format(step + 1, mean_acc * 100))
+    plt.figure()
+    plt.plot(range(1, len(losses) + 1), losses)
+    plt.xlabel("Number of batches")
+    plt.ylabel("Batch loss")
+    plt.savefig("fig/loss_curve.pdf")
+    plt.close()
+
+    plt.figure()
+    plt.plot(range(1, FLAGS.eval_freq * len(accuracies) + 1, FLAGS.eval_freq), accuracies)
+    plt.xlabel("Number of batches")
+    plt.ylabel("Accuracy on the test set")
+    plt.savefig("fig/accuracy_curve.pdf")
     ########################
     # END OF YOUR CODE    #
     #######################

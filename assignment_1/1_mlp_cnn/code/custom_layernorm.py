@@ -39,7 +39,9 @@ class CustomLayerNormAutograd(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
         
-        raise NotImplementedError
+        self.eps = eps
+        self.gamma = nn.Parameter(torch.ones(n_neurons))
+        self.beta = nn.Parameter(torch.zeros(n_neurons))
         
         ########################
         # END OF YOUR CODE    #
@@ -64,7 +66,11 @@ class CustomLayerNormAutograd(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        assert input.ndim == 2, "Input to LayerNorm must be two-dimensional"
+        assert input.size(1) == self.beta.size(0), "Input dimension 1 has length {}, expected {}".format(
+            input.size(1), self.beta.size(0))
+        out = (input - input.mean(dim=1, keepdims=True)) / torch.sqrt(input.var(dim=1, keepdims=True, unbiased=False) + self.eps)
+        out = self.gamma[None] * out + self.beta[None]
 
         ########################
         # END OF YOUR CODE    #
@@ -119,7 +125,16 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         # PUT YOUR CODE HERE  #
         #######################
         
-        raise NotImplementedError
+        M = input.size(1)
+        ctx.M = M
+        mu = input.mean(dim=1)
+        var = torch.var(input, dim=1, unbiased=False)
+        normalizer = torch.sqrt(var[:, None] + eps)
+        X_hat = (input - mu[:, None]) / normalizer
+
+        out = gamma[None] * X_hat + beta[None]
+
+        ctx.save_for_backward(X_hat, gamma, normalizer)
 
         ########################
         # END OF YOUR CODE    #
@@ -147,8 +162,20 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
+        grad_input = grad_gamma = grad_beta = None
+        X_hat, gamma, normalizer = ctx.saved_tensors
+        M = ctx.M
 
-        raise NotImplementedError
+        if ctx.needs_input_grad[0]:
+            grad_input = torch.sum(
+                grad_output[:, :, None] * gamma[None, :, None] / normalizer[:, :, None] / M
+                * (M * (torch.arange(M)[None, :, None] == torch.arange(M)[None, None, :])
+                   - 1 - X_hat[:, :, None] * X_hat[:, None, :]),
+                dim=1)
+        if ctx.needs_input_grad[1]:
+            grad_gamma = torch.diag(grad_output.T @ X_hat)
+        if ctx.needs_input_grad[2]:
+            grad_beta = grad_output.sum(dim=0)
         
         ########################
         # END OF YOUR CODE    #
@@ -187,7 +214,9 @@ class CustomLayerNormManualModule(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        self.eps = eps
+        self.gamma = nn.Parameter(torch.ones(n_neurons))
+        self.beta = nn.Parameter(torch.zeros(n_neurons))
         
         ########################
         # END OF YOUR CODE    #
@@ -212,7 +241,11 @@ class CustomLayerNormManualModule(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        assert input.ndim == 2, "Input to LayerNorm must be two-dimensional"
+        assert input.size(1) == self.beta.size(0), "Input dimension 1 has length {}, expected {}".format(
+            input.size(1), self.beta.size(0))
+        layer_norm = CustomLayerNormManualFunction()
+        out = layer_norm.apply(input, self.gamma, self.beta, self.eps)
         
         ########################
         # END OF YOUR CODE    #

@@ -8,6 +8,7 @@ from __future__ import print_function
 
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 import os
 from mlp_numpy import MLP
 from modules import CrossEntropyModule
@@ -47,7 +48,9 @@ def accuracy(predictions, targets):
     ########################
     # PUT YOUR CODE HERE  #
     #######################
-    raise NotImplementedError
+    n = targets.shape[0]
+    numeric_predictions = np.argmax(predictions, axis=1)
+    accuracy = np.sum(targets[np.arange(n), numeric_predictions]) / n
     ########################
     # END OF YOUR CODE    #
     #######################
@@ -78,7 +81,59 @@ def train():
     ########################
     # PUT YOUR CODE HERE  #
     #######################
-    raise NotImplementedError
+    mlp = MLP(3 * 32 * 32, dnn_hidden_units, 10)
+    cifar = cifar10_utils.get_cifar10(FLAGS.data_dir)
+    criterion = CrossEntropyModule()
+
+    losses = []
+    accuracies = []
+    for step in range(FLAGS.max_steps):
+        # load the next batch
+        x, y = cifar["train"].next_batch(FLAGS.batch_size)
+        #x, y = cifar["train"].images[:FLAGS.batch_size], cifar["train"].labels[:FLAGS.batch_size]
+        x = x.reshape(FLAGS.batch_size, -1)
+
+        # forward pass
+        out = mlp.forward(x)
+        loss = criterion.forward(out, y)
+        losses.append(loss)
+        #print(loss)
+
+        # backward pass
+        dout = criterion.backward(out, y)
+        mlp.backward(dout)
+
+        # update weights and biases based on calculated gradients
+        for module in mlp.modules:
+            # skip modules with no parameters
+            if not hasattr(module, "grads"):
+                continue
+            for k, v in module.grads.items():
+                module.params[k] -= FLAGS.learning_rate * v
+                # zero the gradients after update
+                module.grads[k] = 0
+
+        # evaluate every FLAGS.eval_freq iterations
+        if (step + 1) % FLAGS.eval_freq == 0:
+            x, y = cifar["test"].images, cifar["test"].labels
+            x = x.reshape(10000, -1)
+            out = mlp.forward(x)
+            #print(out[:10])
+            acc = accuracy(out, y)
+            accuracies.append(acc)
+            print("Step {}, accuracy: {:.5f} %".format(step + 1, acc * 100))
+    plt.figure()
+    plt.plot(range(1, len(losses) + 1), losses)
+    plt.xlabel("Number of batches")
+    plt.ylabel("Batch loss")
+    plt.savefig("../fig/loss_curve.pdf")
+    plt.close()
+
+    plt.figure()
+    plt.plot(range(1, FLAGS.eval_freq * len(accuracies) + 1, FLAGS.eval_freq), accuracies)
+    plt.xlabel("Number of batches")
+    plt.ylabel("Accuracy on the test set")
+    plt.savefig("../fig/accuracy_curve.pdf")
     ########################
     # END OF YOUR CODE    #
     #######################

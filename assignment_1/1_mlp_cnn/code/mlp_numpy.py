@@ -37,7 +37,14 @@ class MLP(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        raise NotImplementedError
+        self.modules = []
+        dims = list(zip([n_inputs] + n_hidden, n_hidden + [n_classes]))
+        for i, (in_features, out_features) in enumerate(dims):
+            linear = LinearModule(in_features, out_features)
+            self.modules.append(linear)
+            if i < len(dims) - 1:
+                self.modules.append(ELUModule())
+        self.modules.append(SoftMaxModule())
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -59,7 +66,9 @@ class MLP(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        raise NotImplementedError
+        out = x
+        for module in self.modules:
+            out = module.forward(out)
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -80,7 +89,8 @@ class MLP(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        raise NotImplementedError
+        for module in reversed(self.modules):
+            dout = module.backward(dout)
         ########################
         # END OF YOUR CODE    #
         #######################

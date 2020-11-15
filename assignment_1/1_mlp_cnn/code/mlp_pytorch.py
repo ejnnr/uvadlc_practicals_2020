@@ -16,7 +16,7 @@ class MLP(nn.Module):
     Once initialized an MLP object can perform forward.
     """
     
-    def __init__(self, n_inputs, n_hidden, n_classes):
+    def __init__(self, n_inputs, n_hidden, n_classes, better_init=False):
         """
         Initializes MLP object.
         
@@ -37,7 +37,28 @@ class MLP(nn.Module):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        raise NotImplementedError
+        super().__init__()
+        modules = []
+        dims = list(zip([n_inputs] + n_hidden, n_hidden + [n_classes]))
+        for i, (in_features, out_features) in enumerate(dims):
+            linear = nn.Linear(in_features, out_features)
+            modules.append(linear)
+            if i < len(dims) - 1:
+                #modules.append(nn.BatchNorm1d(out_features))
+                modules.append(nn.ELU())
+        modules.append(nn.Softmax(dim=1))
+
+        # use ModuleList to register the submodules, necessary
+        # to make things like MLP.parameters() etc. work
+        self.layers = nn.ModuleList(modules)
+        print(modules)
+
+        def init_weights(m):
+            if type(m) == nn.Linear:
+                m.bias.data.fill_(0)
+                nn.init.normal_(m.weight.data, 0, 0.0001)
+        if not better_init:
+            self.apply(init_weights)
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -59,7 +80,9 @@ class MLP(nn.Module):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        raise NotImplementedError
+        out = x
+        for module in self.layers:
+            out = module(out)
         ########################
         # END OF YOUR CODE    #
         #######################

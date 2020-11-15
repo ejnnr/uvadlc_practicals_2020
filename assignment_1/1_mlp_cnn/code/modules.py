@@ -24,13 +24,15 @@ class LinearModule(object):
     
         Also, initialize gradients with zeros.
         """
-        
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-
-        raise NotImplementedError
-        
+        self.params = {}
+        self.grads = {}
+        self.params['weight'] = np.random.normal(0, 0.0001, (out_features, in_features))
+        self.params['bias'] = np.zeros(out_features)
+        self.grads['weight'] = np.zeros((out_features, in_features))
+        self.grads['bias'] = np.zeros(out_features)
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -53,9 +55,8 @@ class LinearModule(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-
-        raise NotImplementedError
-        
+        self.x = x
+        out = x @ self.params['weight'].T + self.params['bias']
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -80,7 +81,9 @@ class LinearModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        self.grads['weight'] = dout.T @ self.x
+        self.grads['bias'] = np.sum(dout, axis=0)
+        dx = dout @ self.params['weight']
         
         ########################
         # END OF YOUR CODE    #
@@ -113,7 +116,10 @@ class SoftMaxModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        max_x = np.max(x, axis=-1)
+        x_ = x - max_x[:, None]
+        out = np.exp(x_)/np.sum(np.exp(x_), axis=-1)[:, None]
+        self.out = out
         
         ########################
         # END OF YOUR CODE    #
@@ -137,7 +143,7 @@ class SoftMaxModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        dx = dout * self.out - np.sum(dout * self.out, axis=-1)[:, None] * self.out
         
         ########################
         # END OF YOUR CODE    #
@@ -168,7 +174,7 @@ class CrossEntropyModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        out = -np.sum(y * np.log(x)) / x.shape[0]
         
         ########################
         # END OF YOUR CODE    #
@@ -193,7 +199,7 @@ class CrossEntropyModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        dx = -1/x.shape[0] * y/x
         
         ########################
         # END OF YOUR CODE    #
@@ -225,7 +231,11 @@ class ELUModule(object):
         # PUT YOUR CODE HERE  #
         #######################
         
-        raise NotImplementedError
+        # Implement case distinction by multiplying with boolean array.
+        # This performs some unnecessary computations of exponentials
+        # but it can be vectorized which still makes it more efficient
+        self.x = x
+        out = np.where(x >= 0, x, np.exp(x) - 1)
         
         ########################
         # END OF YOUR CODE    #
@@ -249,7 +259,8 @@ class ELUModule(object):
         # PUT YOUR CODE HERE  #
         #######################
 
-        raise NotImplementedError
+        dh = (self.x >= 0).astype(bool) + np.exp(self.x) * (self.x < 0)
+        dx = dout * dh
 
         ########################
         # END OF YOUR CODE    #
