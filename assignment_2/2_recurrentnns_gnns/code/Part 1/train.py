@@ -186,11 +186,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # dataset
-    parser.add_argument('--dataset', type=str, default='randomcomb',
+    parser.add_argument('--dataset', type=str, default='bipalindrome',
                         choices=['randomcomb', 'bss', 'bipalindrome'],
                         help='Dataset to be trained on.')
     # Model params
-    parser.add_argument('--model_type', type=str, default='biLSTM',
+    parser.add_argument('--model_type', type=str, default='LSTM',
                         choices=['LSTM', 'biLSTM', 'GRU', 'peepLSTM'],
                         help='Model type: LSTM, biLSTM, GRU or peepLSTM')
     parser.add_argument('--input_length', type=int, default=6,
@@ -201,6 +201,9 @@ if __name__ == "__main__":
                         help='Dimensionality of output sequence')
     parser.add_argument('--num_hidden', type=int, default=256,
                         help='Number of hidden units in the model')
+    # For binary input sequences, more than 2 is overkill
+    parser.add_argument('--embedding_dim', type=int, default=2,
+                        help='Embedding dimension')
 
     # Training params
     parser.add_argument('--batch_size', type=int, default=256,
