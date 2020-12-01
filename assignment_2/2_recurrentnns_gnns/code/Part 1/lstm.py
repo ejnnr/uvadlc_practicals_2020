@@ -57,6 +57,7 @@ class LSTM(nn.Module):
         self.num_classes = num_classes
         self.batch_size = batch_size
         self.hidden_dim = hidden_dim
+        self.device = device
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -65,11 +66,15 @@ class LSTM(nn.Module):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        self.h = torch.zeros(self.hidden_dim, self.batch_size)
-        self.c = torch.zeros(self.hidden_dim, self.batch_size)
+        self.h = torch.zeros(self.hidden_dim, self.batch_size).to(self.device)
+        self.c = torch.zeros(self.hidden_dim, self.batch_size).to(self.device)
         for i in range(x.size(1)):
             embedded = self.embedding(x[:, i, 0].long())
             self.next_state(embedded)
+            # reset hidden/cell state if we just saw a padding element
+            # see @280 on Piazza
+            # self.h[:, x[:, i, 0] == 0] = 0
+            # self.c[:, x[:, i, 0] == 0] = 0
         p = self.linear_p(self.h)
         return torch.log_softmax(p, dim=-1)
         ########################

@@ -21,6 +21,9 @@ from __future__ import print_function
 import argparse
 import time
 from datetime import datetime
+import statistics
+
+import matplotlib.pyplot as plt
 
 import torch
 import torch.optim as optim
@@ -43,9 +46,9 @@ import numpy as np
 ###############################################################################
 
 
-def train(config):
-    np.random.seed(0)
-    torch.manual_seed(0)
+def train(config, seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
     # Initialize the device which to run the model on
@@ -75,7 +78,7 @@ def train(config):
     elif config.dataset == 'bipalindrome':
         print('Load binary palindrome dataset ...')
         # Initialize the dataset and data loader
-        config.num_classes = config.input_length
+        config.num_classes = 2
         dataset = datasets.BinaryPalindromeDataset(config.input_length)
         data_loader = DataLoader(dataset, config.batch_size, num_workers=1,
                                  drop_last=True)
@@ -121,6 +124,9 @@ def train(config):
     loss_function = torch.nn.NLLLoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
+    losses = []
+    train_accuracies = []
+
     for step, (batch_inputs, batch_targets) in enumerate(data_loader):
 
         # Only for time measurement of step through network
@@ -139,6 +145,7 @@ def train(config):
         # Compute the loss, gradients and update network parameters
         loss = loss_function(log_probs, batch_targets)
         loss.backward()
+        losses.append(loss.item())
 
         #######################################################################
         # Check for yourself: what happens here and why?
@@ -152,6 +159,7 @@ def train(config):
         predictions = torch.argmax(log_probs, dim=1)
         correct = (predictions == batch_targets).sum().item()
         accuracy = correct / log_probs.size(0)
+        train_accuracies.append(accuracy)
 
         # print(predictions[0, ...], batch_targets[0, ...])
 
@@ -175,7 +183,35 @@ def train(config):
             # https://github.com/pytorch/pytorch/pull/9655
             break
 
+        # Stop early if the last 100 losses were all low enough
+        if all(x < 0.001 for x in losses[-100:]):
+               break
+
     print('Done training.')
+
+    # evaluate the model on new random data
+    model.eval()
+    test_accuracies = []
+
+    for step, (batch_inputs, batch_targets) in enumerate(data_loader):
+        # Move to GPU
+        batch_inputs = batch_inputs.to(device)     # [batch_size, seq_length,1]
+        batch_targets = batch_targets.to(device)   # [batch_size]
+
+        # Forward pass
+        with torch.no_grad():
+            log_probs = model(batch_inputs)
+            predictions = torch.argmax(log_probs, dim=1)
+            correct = (predictions == batch_targets).sum().item()
+            accuracy = correct / log_probs.size(0)
+        test_accuracies.append(accuracy)
+
+        if step >= 5000 / config.batch_size:
+            # If you receive a PyTorch data-loader error, check this bug report
+            # https://github.com/pytorch/pytorch/pull/9655
+            break
+
+    return losses, train_accuracies, torch.tensor(test_accuracies).mean().item()
     ###########################################################################
     ###########################################################################
 
@@ -201,8 +237,8 @@ if __name__ == "__main__":
                         help='Dimensionality of output sequence')
     parser.add_argument('--num_hidden', type=int, default=256,
                         help='Number of hidden units in the model')
-    # For binary input sequences, more than 2 is overkill
-    parser.add_argument('--embedding_dim', type=int, default=2,
+    # For binary input sequences (plus 0 padding), more than 3 is overkill
+    parser.add_argument('--embedding_dim', type=int, default=3,
                         help='Embedding dimension')
 
     # Training params
@@ -224,7 +260,32 @@ if __name__ == "__main__":
     parser.add_argument('--summary_path', type=str, default="./summaries/",
                         help='Output path for summaries')
 
-    config = parser.parse_args()
 
     # Train the model
-    train(config)
+    all_losses = []
+    all_accs = []
+    all_test_accs = []
+    for seed in range(3):
+        config = parser.parse_args()
+        print(config)
+        losses, train_accs, test_acc = train(config, seed)
+        all_losses.append(losses)
+        all_accs.append(train_accs)
+        all_test_accs.append(test_acc)
+    print("Test accuracies:", all_test_accs)
+    print("Mean:", statistics.mean(all_test_accs), "+-", statistics.stdev(all_test_accs))
+
+    for losses in all_losses:
+        plt.plot(losses, color="blue", alpha=0.3)
+    plt.xlabel("Step")
+    plt.ylabel("Loss")
+    plt.savefig("{}_losses_{}.pdf".format(config.model_type, config.input_length))
+    plt.close()
+
+    for accs in all_accs:
+        plt.plot(accs, color="blue", alpha=0.3)
+    plt.xlabel("Step")
+    plt.ylabel("Accuracy")
+    plt.savefig("{}_train_accs_{}.pdf".format(config.model_type, config.input_length))
+    plt.close()
+    
