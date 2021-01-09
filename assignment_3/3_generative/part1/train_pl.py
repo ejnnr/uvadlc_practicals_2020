@@ -64,11 +64,14 @@ class VAE(pl.LightningModule):
             bpd - The average bits per dimension metric of the batch.
                   This is also the loss we train on. Shape: single scalar
         """
+        mean, log_std = self.encoder(imgs)
+        sample = sample_reparameterize(mean, torch.exp(log_std))
+        recon = self.decoder(sample)
 
-        L_rec = None
-        L_reg = None
-        bpd = None
-        raise NotImplementedError
+        # We want to sum over pixels but average over the batch
+        L_rec = torch.nn.functional.binary_cross_entropy_with_logits(recon, imgs, reduction="none").mean(dim=0).sum()
+        L_reg = KLD(mean, log_std).mean()
+        bpd = elbo_to_bpd(L_rec + L_reg, imgs.size()[1:])
         return L_rec, L_reg, bpd
 
     @torch.no_grad()
@@ -83,9 +86,9 @@ class VAE(pl.LightningModule):
                      between 0 and 1 from which we obtain "x_samples".
                      Shape: [B,C,H,W]
         """
-        x_mean = None
-        x_samples = None
-        raise NotImplementedError
+        z_samples = torch.randn(batch_size, self.hparams.z_dim)
+        x_mean = torch.sigmoid(self.decoder(z_samples))
+        x_samples = torch.bernoulli(x_mean)
         return x_samples, x_mean
 
     def configure_optimizers(self):
@@ -154,8 +157,14 @@ class GenerateCallback(pl.Callback):
         # - You can access the tensorboard logger via trainer.logger.experiment
         # - Use the torchvision function "make_grid" to create a grid of multiple images
         # - Use the torchvision function "save_image" to save an image grid to disk
-
-        raise NotImplementedError
+        samples, mean = pl_module.sample(64)
+        sample_grid = make_grid(samples, nrow=8)
+        mean_grid = make_grid(mean, nrow=8)
+        trainer.logger.experiment.add_image("Samples", sample_grid, epoch)
+        trainer.logger.experiment.add_image("Means", mean_grid, epoch)
+        if self.save_to_disk:
+            save_image(samples, nrow=8, fp=os.path.join(trainer.logger.log_dir, f"samples_{epoch}.png"))
+            save_image(mean, nrow=8, fp=os.path.join(trainer.logger.log_dir, f"means_{epoch}.png"))
 
 
 def train_vae(args):

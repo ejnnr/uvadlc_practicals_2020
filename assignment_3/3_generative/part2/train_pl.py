@@ -63,8 +63,8 @@ class GAN(pl.LightningModule):
         Outputs:
             x - Generated images of shape [B,C,H,W]
         """
-        x = None
-        raise NotImplementedError
+        z = torch.randn(batch_size, self.hparams.z_dim)
+        x = self.generator(z)
         return x
 
     @torch.no_grad()
@@ -81,18 +81,21 @@ class GAN(pl.LightningModule):
         Outputs:
             x - Generated images of shape [B,interpolation_steps+2,C,H,W]
         """
+        z_pairs = torch.randn(batch_size, 2, self.hparams.z_dim)
+        lambdas = torch.linspace(0, 1, interpolation_steps + 2)
+        # z has shape [batch_size, interpolation_steps + 2, z_dim]
+        z = lambdas[None, :, None] * z_pairs[:, 0, None] + (1 - lambdas[None, :, None]) * z_pairs[:, 1, None]
+        x = self.generator(z.flatten(end_dim=1))
+        x = x.view(batch_size, interpolation_steps + 2, *self.generator.output_shape)
 
-        x = None
-        raise NotImplementedError
         return x
 
     def configure_optimizers(self):
         # Create optimizer for both generator and discriminator.
         # You can use the Adam optimizer for both models.
         # It is recommended to reduce the momentum (beta1) to e.g. 0.5
-        optimizer_gen = None
-        optimizer_disc = None
-        raise NotImplementedError
+        optimizer_gen = torch.optim.Adam(self.generator.parameters(), lr=self.hparams.lr, betas=(0.5, 0.999))
+        optimizer_disc = torch.optim.Adam(self.discriminator.parameters(), lr=self.hparams.lr, betas=(0.5, 0.999))
         return [optimizer_gen, optimizer_disc], []
 
     def training_step(self, batch, batch_idx, optimizer_idx):
@@ -137,9 +140,13 @@ class GAN(pl.LightningModule):
             loss - The loss for the generator to optimize
         """
 
-        loss = None
+        z = torch.randn(x_real.size(0), self.hparams.z_dim)
+        x_fake = self.generator(z)
+        pred_fake = self.discriminator(x_fake)
+
+        # We use the non-saturating loss rather than the negative discriminator loss
+        loss = -F.logsigmoid(pred_fake).mean()
         self.log("generator/loss", loss)
-        raise NotImplementedError
 
         return loss
 
@@ -156,12 +163,20 @@ class GAN(pl.LightningModule):
         Outputs:
             loss - The loss for the discriminator to optimize
         """
+        z = torch.randn(x_real.size(0), self.hparams.z_dim)
+        x_fake = self.generator(z)
+        pred_fake = self.discriminator(x_fake)
+        pred_real = self.discriminator(x_real)
+
+        loss = -F.logsigmoid(pred_real).mean() - torch.log(1 - torch.sigmoid(pred_fake)).mean()
+        accuracy_real = (pred_real > 0).float().mean()
+        accuracy_fake = (pred_fake < 0).float().mean()
 
         # Remark: there are more metrics that you can add. 
         # For instance, how about the accuracy of the discriminator?
-        loss = None
-        self.log("generator/loss", loss)
-        raise NotImplementedError
+        self.log("discriminator/loss", loss)
+        self.log("discriminator/accuracy_real", accuracy_real)
+        self.log("discriminator/accuracy_fake", accuracy_fake)
 
         return loss
 
@@ -209,7 +224,11 @@ class GenerateCallback(pl.Callback):
         # - Use torchvision function "make_grid" to create a grid of multiple images
         # - Use torchvision function "save_image" to save an image grid to disk
 
-        raise NotImplementedError
+        samples = pl_module.sample(64)
+        sample_grid = make_grid(samples, nrow=8)
+        trainer.logger.experiment.add_image("Samples", sample_grid, epoch)
+        if self.save_to_disk:
+            save_image(samples, nrow=8, fp=os.path.join(trainer.logger.log_dir, f"samples_{epoch}.png"))
 
 
 class InterpolationCallback(pl.Callback):
@@ -261,7 +280,11 @@ class InterpolationCallback(pl.Callback):
 
         # You also have to implement this function in a later question of the assignemnt. 
         # By default it is skipped to allow you to test your other code so far. 
-        print("WARNING: Interpolation function has not been implemented yet.")
+        interpolations = pl_module.interpolate(self.batch_size, self.interpolation_steps).flatten(end_dim=1)
+        grid = make_grid(interpolations, nrow=self.interpolation_steps + 2)
+        trainer.logger.experiment.add_image("Interpolations", grid, epoch)
+        if self.save_to_disk:
+            save_image(grid, nrow=self.interpolation_steps + 2, fp=os.path.join(trainer.logger.log_dir, f"interpolations_{epoch}.png"))
         pass
 
 
@@ -293,12 +316,16 @@ def train_gan(args):
 
     # Create model
     pl.seed_everything(args.seed)  # To be reproducable
-    model = GAN(hidden_dims_gen=args.hidden_dims_gen,
-                hidden_dims_disc=args.hidden_dims_disc,
-                dp_rate_gen=args.dp_rate_gen,
-                dp_rate_disc=args.dp_rate_disc,
-                z_dim=args.z_dim,
-                lr=args.lr)
+
+    if args.checkpoint == '':
+        model = GAN(hidden_dims_gen=args.hidden_dims_gen,
+                    hidden_dims_disc=args.hidden_dims_disc,
+                    dp_rate_gen=args.dp_rate_gen,
+                    dp_rate_disc=args.dp_rate_disc,
+                    z_dim=args.z_dim,
+                    lr=args.lr)
+    else:
+        model = GAN.load_from_checkpoint(args.checkpoint)
 
     if not args.progress_bar:
         print("\nThe progress bar has been surpressed. For updates on the training progress, " + \
@@ -307,6 +334,7 @@ def train_gan(args):
 
     # Training
     gen_callback.sample_and_save(trainer, model, epoch=0)  # Initial sample
+    inter_callback.sample_and_save(trainer, model, epoch=0)  # Initial interpolation
     trainer.fit(model, train_loader)
 
     return model
@@ -354,6 +382,9 @@ if __name__ == '__main__':
     parser.add_argument('--progress_bar', action='store_true',
                         help='Use a progress bar indicator for interactive experimentation. '+ \
                              'Not to be used in conjuction with SLURM jobs.')
+
+    parser.add_argument('--checkpoint', default='', type=str,
+                        help='Path of the checkpoint to load (empty => train from scratch)')
 
     args = parser.parse_args()
 

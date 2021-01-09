@@ -38,7 +38,16 @@ class GeneratorMLP(nn.Module):
         # You are allowed to experiment with the architecture and change the activation function, normalization, etc.
         # However, the default setup is sufficient to generate fine images and gain full points in the assignment.
         # The default setup is a sequence of Linear, Dropout, LeakyReLU (alpha=0.2)
-        raise NotImplementedError
+        self.output_shape = output_shape
+        modules = []
+        dims = [z_dim] + hidden_dims
+        for in_dim, out_dim in zip(dims[:-1], dims[1:]):
+            modules.append(nn.Linear(in_dim, out_dim))
+            modules.append(nn.Dropout(dp_rate))
+            modules.append(nn.LeakyReLU(0.2))
+        modules.append(nn.Linear(dims[-1], np.prod(output_shape)))
+        modules.append(nn.Tanh())
+        self.net = nn.Sequential(*modules)
 
     def forward(self, z):
         """
@@ -47,8 +56,8 @@ class GeneratorMLP(nn.Module):
         Outputs:
             x - Generated image of shape [B,output_shape[0],output_shape[1],output_shape[2]]
         """
-        x = None
-        raise NotImplementedError
+        x = self.net(z)
+        x = x.view(-1, *self.output_shape)
         return x
 
     @property
@@ -75,7 +84,15 @@ class DiscriminatorMLP(nn.Module):
         # You are allowed to experiment with the architecture and change the activation function, normalization, etc.
         # However, the default setup is sufficient to generate fine images and gain full points in the assignment.
         # The default setup is the same as the generator: a sequence of Linear, Dropout, LeakyReLU (alpha=0.2)
-        raise NotImplementedError
+        self.input_dims = input_dims
+        modules = []
+        dims = [input_dims] + hidden_dims
+        for in_dim, out_dim in zip(dims[:-1], dims[1:]):
+            modules.append(nn.Linear(in_dim, out_dim))
+            modules.append(nn.Dropout(dp_rate))
+            modules.append(nn.LeakyReLU(0.2))
+        modules.append(nn.Linear(dims[-1], 1))
+        self.net = nn.Sequential(*modules)
 
     def forward(self, x):
         """
@@ -86,6 +103,6 @@ class DiscriminatorMLP(nn.Module):
                     Note that this should be a logit output *without* a sigmoid applied on it.
                     Shape: [B,1]
         """
-        preds = None
-        raise NotImplementedError
+        x = x.view(-1, self.input_dims)
+        preds = self.net(x)
         return preds

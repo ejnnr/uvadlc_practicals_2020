@@ -32,8 +32,8 @@ def sample_reparameterize(mean, std):
             The tensor should have the same shape as the mean and std input tensors.
     """
 
-    z = None
-    raise NotImplementedError
+    sample = torch.randn_like(mean)
+    z = std * sample + mean
     return z
 
 
@@ -49,8 +49,8 @@ def KLD(mean, log_std):
               The values represent the Kullback-Leibler divergence to unit Gaussians.
     """
 
-    KLD = None
-    raise NotImplementedError
+    # Note that 2 * log_std = log(std**2)
+    KLD = 0.5 * torch.sum(torch.exp(2 * log_std) + mean**2 - 1 - 2 * log_std, dim=-1)
     return KLD
 
 
@@ -63,8 +63,9 @@ def elbo_to_bpd(elbo, img_shape):
     Outputs:
         bpd - The negative log likelihood in bits per dimension for the given image.
     """
-    bpd = None
-    raise NotImplementedError
+    dim_product = torch.prod(torch.tensor(img_shape))
+    # Note that log_2(e) = 1/log(2)
+    bpd = torch.sum(elbo) / np.log(2) / dim_product
     return bpd
 
 
@@ -89,7 +90,15 @@ def visualize_manifold(decoder, grid_size=20):
     # - You can use torchvision's function "make_grid" to combine the grid_size**2 images into a grid
     # - Remember to apply a sigmoid after the decoder
 
-    img_grid = None
-    raise NotImplementedError
+    # percentiles will be [0.5/grid_size, 1.5/grid_size, ..., (grid_size-0.5)/grid_size]
+    percentiles = np.arange(0.5, grid_size) / grid_size
+    z = torch.from_numpy(norm.ppf(percentiles)).float().to(decoder.device)
+    z_x, z_y = torch.meshgrid(z, z)
+    # z_grid has shape [grid_size, grid_size, 2]
+    z_grid = torch.stack((z_x, z_y), dim=2)
+
+    images = torch.sigmoid(decoder(z_grid.view(-1, 2)))
+
+    img_grid = make_grid(images, nrow=grid_size)
 
     return img_grid

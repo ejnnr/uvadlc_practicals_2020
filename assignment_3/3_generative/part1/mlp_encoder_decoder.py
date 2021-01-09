@@ -36,7 +36,15 @@ class MLPEncoder(nn.Module):
         # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
         # Feel free to experiment with the architecture yourself, but the one specified here is 
         # sufficient for the assignment.
-        raise NotImplementedError
+        self.input_dim = input_dim
+        modules = []
+        dims = [input_dim] + hidden_dims
+        for in_dim, out_dim in zip(dims[:-1], dims[1:]):
+            modules.append(nn.Linear(in_dim, out_dim))
+            modules.append(nn.ReLU())
+        self.net = nn.Sequential(*modules)
+        self.mean_net = nn.Linear(dims[-1], z_dim)
+        self.std_net = nn.Linear(dims[-1], z_dim)
 
     def forward(self, x):
         """
@@ -48,10 +56,11 @@ class MLPEncoder(nn.Module):
                       of the latent distributions.
         """
 
+        x = x.view(-1, self.input_dim)
+        x = self.net(x)
         # Remark: Make sure to understand why we are predicting the log_std and not std
-        mean = None
-        log_std = None
-        raise NotImplementedError
+        mean = self.mean_net(x)
+        log_std = self.std_net(x)
         return mean, log_std
 
 
@@ -73,7 +82,13 @@ class MLPDecoder(nn.Module):
         # For an intial architecture, you can use a sequence of linear layers and ReLU activations.
         # Feel free to experiment with the architecture yourself, but the one specified here is 
         # sufficient for the assignment.
-        raise NotImplementedError
+        modules = []
+        dims = [z_dim] + hidden_dims
+        for in_dim, out_dim in zip(dims[:-1], dims[1:]):
+            modules.append(nn.Linear(in_dim, out_dim))
+            modules.append(nn.ReLU())
+        modules.append(nn.Linear(dims[-1], np.prod(output_shape)))
+        self.net = nn.Sequential(*modules)
 
     def forward(self, z):
         """
@@ -85,8 +100,8 @@ class MLPDecoder(nn.Module):
                 Shape: [B,output_shape[0],output_shape[1],output_shape[2]]
         """
 
-        x = None
-        raise NotImplementedError
+        x = self.net(z)
+        x = x.view(-1, *self.output_shape)
         return x
 
     @property
